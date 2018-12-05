@@ -195,6 +195,128 @@ class main(object):
 
             i += 1
 
+    def inverseKinematicsFunction(self, angles, delta_end_effector):
+        t1 = Symbol("t1")
+        t2 = Symbol("t2")
+        t3 = Symbol("t3")
+        l1 = Symbol("l1")
+        l2 = Symbol("l2")
+        l3 = Symbol("l3")
+
+        x = cos(t1)*cos(t2)*sin(t3)*l3 + cos(t1)*sin(t2)*cos(t3)*l3 + cos(t1)*sin(t2)*l2
+        y = sin(t1)*cos(t2)*sin(t3)*l3 + sin(t1)*sin(t2)*cos(t3)*l3 + sin(t1)*sin(t2)*l2
+        z = -sin(t2)*sin(t3)*l3 + cos(t2)*cos(t3)*l3 + cos(t2)*l2 + l1
+
+        x = x.subs(l1, 2.0)
+        x = x.subs(l2, 1.0)
+        x = x.subs(l3, 1.0)
+        y = y.subs(l1, 2.0)
+        y = y.subs(l2, 1.0)
+        y = y.subs(l3, 1.0)
+        z = z.subs(l1, 2.0)
+        z = z.subs(l2, 1.0)
+        z = z.subs(l3, 1.0)
+
+        a00 = diff( x , t1)
+        a01 = diff( x , t2)
+        a02 = diff( x , t3)
+
+        a10 = diff( y , t1)
+        a11 = diff( y , t2)
+        a12 = diff( y , t3)
+
+        a20 = diff( z , t1)
+        a21 = diff( z , t2)
+        a22 = diff( z , t3)
+
+        print(angles)
+
+        a00 = a00.subs(t1, angles[0])
+        a00 = a00.subs(t2, angles[1])
+        a00 = a00.subs(t3, angles[2])
+        a01 = a01.subs(t1, angles[0])
+        a01 = a01.subs(t2, angles[1])
+        a01 = a01.subs(t3, angles[2])
+        a02 = a02.subs(t1, angles[0])
+        a02 = a02.subs(t2, angles[1])
+        a02 = a02.subs(t3, angles[2])
+        a10 = a10.subs(t1, angles[0])
+        a10 = a10.subs(t2, angles[1])
+        a10 = a10.subs(t3, angles[2])
+        a11 = a11.subs(t1, angles[0])
+        a11 = a11.subs(t2, angles[1])
+        a11 = a11.subs(t3, angles[2])
+        a12 = a12.subs(t1, angles[0])
+        a12 = a12.subs(t2, angles[1])
+        a12 = a12.subs(t3, angles[2])
+        a20 = a20.subs(t1, angles[0])
+        a20 = a20.subs(t2, angles[1])
+        a20 = a20.subs(t3, angles[2])
+        a21 = a21.subs(t1, angles[0])
+        a21 = a21.subs(t2, angles[1])
+        a21 = a21.subs(t3, angles[2])
+        a22 = a22.subs(t1, angles[0])
+        a22 = a22.subs(t2, angles[1])
+        a22 = a22.subs(t3, angles[2])        
+
+        j = np.array([ [a00, a01, a02], \
+                        [a10, a11, a12], \
+                        [a20, a21, a22]
+                      ], dtype="float")        
+
+        j_inv = np.linalg.inv(j)
+
+        delta_angles = j_inv.dot(delta_end_effector)        
+
+        new_angles = angles + delta_angles        
+
+        x = x.subs(t1, new_angles[0])
+        x = x.subs(t2, new_angles[1])
+        x = x.subs(t3, new_angles[2])
+        y = y.subs(t1, new_angles[0])
+        y = y.subs(t2, new_angles[1])
+        y = y.subs(t3, new_angles[2])
+        z = z.subs(t1, new_angles[0])
+        z = z.subs(t2, new_angles[1])
+        z = z.subs(t3, new_angles[2]) 
+       
+        return new_angles, float(x), float(y), float(z)
+
+    def jacobianExercise(self):
+        self.angles = np.zeros(shape=(self.trajectory.shape[0], self.trajectory.shape[1]))
+        i = 0
+        x = self.trajectory[i][0]
+        y = self.trajectory[i][1]
+        z = self.trajectory[i][2]
+
+        self.angles[i][0] = self.theta1
+        self.angles[i][1] = self.theta2
+        self.angles[i][2] = self.theta3
+
+        while(i < self.trajectory.shape[0]-1):            
+            
+            delta_end = np.array([  self.trajectory[i+1][0]-x,
+                                    self.trajectory[i+1][1]-y,
+                                    self.trajectory[i+1][2]-z
+                                ])
+
+            #delta_end = np.array([0.0, 0, 0.1])
+            
+            self.angles[i+1], x, y, z = self.inverseKinematicsFunction(self.angles[i], delta_end)
+            
+
+            # self.theta1 += delta_angles[0]
+            # self.theta2 += delta_angles[1]
+            # self.theta3 += delta_angles[2]
+
+            # self.angles[i][0] = self.theta1
+            # self.angles[i][1] = self.theta2
+            # self.angles[i][2] = self.theta3
+
+            #print(self.angles[i])
+
+            i += 1
+
     def netExperiment(self, model):
         self.angles = np.zeros(shape=(self.trajectory.shape[0], 3, 1))
         self.angles[:,0] = self.theta1
@@ -482,7 +604,7 @@ class main(object):
 # step = 0.1
 
 # stepsize = 0.0005
-model = load_model("/home/ricardo/catkin_ws/src/Three_dof_arm/kinematics/model__80_8192_Adam_sigmoid_128_92_64_0.0014767418555882677_0.0019274018703649442_0.00046107815922dataset.csv.h5")
+#model = load_model("/home/ricardo/catkin_ws/src/Three_dof_arm/kinematics/model__80_8192_Adam_sigmoid_128_92_64_0.0014767418555882677_0.0019274018703649442_0.00046107815922dataset.csv.h5")
 
 # while(step < 0.5):
 #     #m = main(step, "jacobian/")
@@ -495,8 +617,9 @@ model = load_model("/home/ricardo/catkin_ws/src/Three_dof_arm/kinematics/model__
 
 #     print(step)
 
-m = main(0.5, "net/")
-m.jacobianExperiment()
+m = main(0.05, "net/")
+#m.jacobianExperiment()
+m.jacobianExercise()
 #m.netExperiment(model)
 m.runOnSimulation()
 #m.plot("net/", "jacobian/")
