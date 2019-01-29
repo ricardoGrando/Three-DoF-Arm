@@ -80,6 +80,7 @@ class serviceCartesianState(object):
             print ("Deu ruim: %s"%e)
 
     def spawnObject(self, count, posx, posy, posz):
+        e = 0
         try:
             spawn = rospy.ServiceProxy("gazebo/spawn_sdf_model", SpawnModel)
 

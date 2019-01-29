@@ -43,7 +43,7 @@ pubList =  [    '/three_dof_arm/rotation_position_controller/command',
 
 class main(object):
 
-    def __init__(self, step, path):
+    def __init__(self, step, radius, path, limit):
         self.linkThreads = []
         self.mutex = threading.Condition()
 
@@ -66,13 +66,15 @@ class main(object):
         # self.theta3 = math.pi/2
         # endEffectorPositionInitial = np.array([1.41421356237656, 0.0, 2.0])
         self.theta1 = 0.0
-        self.theta2 = 0
-        self.theta3 = math.pi/2
-        endEffectorPositionInitial = np.array([1.0, 0.0, 3.0])
+        self.theta2 = math.pi/4
+        self.theta3 = -math.pi*0.75
+        endEffectorPositionInitial = np.array([-0.29289321881345254, 0.0, 2.7071067811865475])
 
         self.nameFile = path+str(step)
 
-        self.trajectory, _ = self.spiral(step, 0.5, endEffectorPositionInitial, 2)
+        self.limit = limit
+
+        self.trajectory, _ = self.spiral(step, radius, endEffectorPositionInitial, 2)
         #print(self.trajectory)
     
     def defineKinematics(self):
@@ -127,7 +129,7 @@ class main(object):
         for i in range(0, endEffector.shape[0]):
             endEffector[i][2] = endEffector[i][2] + radius*math.sin(angle*(i+1))      
             endEffector[i][0] = endEffector[i][0] + radius*math.cos(angle*(i+1)) - radius
-            endEffector[i][1] = endEffector[i][1] + radius*stepSize*(i+1)/3 
+            endEffector[i][1] = endEffector[i][1] - radius*stepSize*(i+1)/10 
             
             if i > 0:
                 dx = (endEffector[i][0] - endEffector[i-1][0])
@@ -149,7 +151,7 @@ class main(object):
     def jacobianExperiment(self):
         self.angles = np.zeros(shape=(self.trajectory.shape[0], self.trajectory.shape[1]))
         i = 0
-        while(i < self.trajectory.shape[0]-1):
+        while(i < self.limit and i < self.trajectory.shape[0]-1):
             self.defineKinematics()
 
             self.a00 = self.change(self.a00, self.theta1, self.theta2, self.theta3)
@@ -317,7 +319,7 @@ class main(object):
 
             i += 1
 
-    def netExperiment(self, model):
+    def netExperiment(self, model, highestList, lowestList):
         self.angles = np.zeros(shape=(self.trajectory.shape[0], 3, 1))
         self.angles[:,0] = self.theta1
         self.angles[:,1] = self.theta2
@@ -330,11 +332,7 @@ class main(object):
         # highestList = np.array([    0.05, 0.05, 0.05, 3.14159265359, 3.14159265359, 3.1414962357793392, 0.1745329251, 0.1745329251, 0.1745329251])
         # lowestList = np.array([     -0.05, -0.05, -0.05, -3.14159265359, -3.14159265359, -3.14159265359, -0.1745329251, -0.1745329251, -0.1745329251])
 
-        
-        highestList = np.array([0.4999992017079372, 0.4999997022129006, 0.4999990498591971, 3.1414988992338606, 3.1414986177704454, 3.1414997536842444, 0.7853903970228057, 0.7853519733451677, 0.785392912463341])
-        lowestList = np.array([-0.4999998315796146, -0.49999960704497365, -0.4999968060261315, -3.1414980107000616, -3.1414989635909167, -3.141498782113911, -0.785345060166046, -0.7853562961740115, -0.785304829597736])       
-        
-        while(i < self.trajectory.shape[0]-1):
+        while(i < self.limit and i < self.trajectory.shape[0]-1):
             # self.defineKinematics()            
 
             # x = self.change(self.x, self.angles[i][0], self.angles[i][1], self.angles[i][2])
@@ -388,16 +386,16 @@ class main(object):
 
         writer.writerow(data.tolist())
 
-    def generateData(self, numberSamples, maxDegree, maxDeltaEnd):
+    def generateData(self, numberSamples, maxDegree, maxDeltaEnd, minDeltaEnd):
 
-        File = "dataset_normal"+str(maxDegree)+"_"+str(maxDeltaEnd)
+        File = "dataset_normal"+str(maxDegree)+"_"+str(maxDeltaEnd)+"_"+str(minDeltaEnd)
         datacsvfile = open(File+".csv", 'a')    
         datacsvwriter = csv.writer(datacsvfile)
         
         i = 0
         count = 0
         
-        while(i < numberSamples):
+        while(count < numberSamples):
             self.theta1 = np.random.uniform(-3.1415, 3.1415)
             self.theta2 = np.random.uniform(-3.1415, 3.1415)
             self.theta3 = np.random.uniform(-3.1415, 3.1415)            
@@ -470,8 +468,10 @@ class main(object):
                     #print("delta_y "+str(delta_y))
                     #print("delta_z "+str(delta_z))
 
-                    if(abs(delta_x) < maxDeltaEnd and abs(delta_y) < maxDeltaEnd and abs(delta_z) < maxDeltaEnd):
-                        if(abs(delta_x) > maxDeltaEnd/10 and abs(delta_y) > maxDeltaEnd/10 and abs(delta_z) > maxDeltaEnd/10):
+                    vector = np.array([delta_x, delta_y, delta_z])
+
+                    if(np.linalg.norm(vector) < maxDeltaEnd):
+                        if(np.linalg.norm(vector) > minDeltaEnd):
                             datacsvwriter.writerow([delta_x, delta_y, delta_z, self.theta1, self.theta2, self.theta3, delta_theta1, delta_theta2, delta_theta3])
 
                             count += 1
@@ -486,7 +486,7 @@ class main(object):
         filesJac = sorted(glob.glob(pathjac+"/*.txt"))
         mseNet = np.zeros(shape=(len(filesNet),))
         mseJac = np.zeros(shape=(len(filesJac),))
-
+        print(filesNet)
         for i in range(0, len(filesNet)):
             with open(filesNet[i]) as f:
                 lines = f.readlines()
@@ -501,32 +501,33 @@ class main(object):
                 for j in range(0, len(lines)):
                     #print(float(lines[j][:-1]))
                     mseJac[i] += float(lines[j][:-1])/float(len(lines))
-
-        
             
         #mpl.rcParams['legend.fontsize'] = 10
-        print(mseJac)
+        #print(mseJac)
 
         fig = plt.figure()
         x = (range(0, mseJac.shape[0]))
         y = mseJac
-        print(len(x))
-        print(y.shape[0])
+        #print(len(x))
+        #print(y.shape[0])
 
         for i in range(0, len(x)):
-            x[i] = float(x[i])/2000 + 0.1005
+            x[i] = float(x[i])
+        
+        
 
         plt.plot(x, y, label='mseJac')
         plt.legend()
         
-        x = (range(0, mseNet.shape[0]))
+        # x = (range(0, mseNet.shape[0]))
         
-        for i in range(0, len(x)):
-            x[i] = float(x[i])/2000 + 0.1005
+        # for i in range(0, len(x)):
+        #     x[i] = float(x[i])/1000 + 0.35
         y = mseNet
-        plt.plot(x, y, label='mseNet')
+        plt.plot(x[:80], y[:80], label='mseNet')
         plt.legend()
-
+        plt.xlabel('Step Distance(mm)')
+        plt.ylabel('Mean Error')
         plt.show()
 
     def runOnSimulation(self):
@@ -600,28 +601,40 @@ class main(object):
         plt.legend([r'$Step$'])
         #plt.savefig("graphs/{}_step.png".format(dataset_name))
         plt.show()
-# i = 0
-# step = 0.1
 
-# stepsize = 0.0005
-#model = load_model("/home/ricardo/catkin_ws/src/Three_dof_arm/kinematics/model__80_8192_Adam_sigmoid_128_92_64_0.0014767418555882677_0.0019274018703649442_0.00046107815922dataset.csv.h5")
+i = 0
 
-# while(step < 0.5):
-#     #m = main(step, "jacobian/")
-#     #m.jacobianExperiment()
-#     m = main(step, "net/", )
-#     m.netExperiment(model)
+step = 0.001
+step_max = 0.1
+max_delta_angle = 20*math.pi/180
+max_delta_cartesian = 0.1
+model = load_model("/home/ricardo/catkin_ws/src/Three_dof_arm/kinematics/20_0.1_0.0001_model__100_4096_Adam_sigmoid_640_320_160_0.000514852326284898_0.000723166794621696_0.000903887354967dataset.csv.h5")
+jacobianFolder = "jacobian_20_0.1_0.0001_/"
+netFolder = "net_20_0.1_0.0001_/"
+
+radius = 0.7
+stepsize = 0.001
+limit = 1000
+
+highestList = np.array([max_delta_cartesian, max_delta_cartesian, max_delta_cartesian, math.pi, math.pi, math.pi, max_delta_angle, max_delta_angle, max_delta_angle])
+lowestList = np.array([-max_delta_cartesian, -max_delta_cartesian, -max_delta_cartesian, -math.pi, -math.pi, -math.pi, -max_delta_angle, -max_delta_angle, -max_delta_angle])
+        
+# while(step < step_max):
+#     m = main(step, radius, jacobianFolder, limit)
+#     m.jacobianExperiment()
+#     m = main(step, radius, netFolder, limit)
+#     m.netExperiment(model, highestList, lowestList)
 
 #     step += stepsize
-#     #m.runOnSimulation()
-
+    
 #     print(step)
 
-m = main(0.05, "net/")
+m = main(0.05, 0.7, "net/", limit)
+m.plot(netFolder, jacobianFolder)
+
 #m.jacobianExperiment()
-m.jacobianExercise()
+#m.jacobianExercise()
 #m.netExperiment(model)
-m.runOnSimulation()
-#m.plot("net/", "jacobian/")
-# m.generateData(10000000, 45, 0.5)
+#m.runOnSimulation()
+#m.generateData(6000000, 5, 0.02*7, 0.0001*7)
 # m.histogramDataset("dataset_normal45_0.5.csv", 0.5)
